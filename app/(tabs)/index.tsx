@@ -45,7 +45,7 @@ export default function HomeScreen() {
   const lastSoundUpdate = useRef<number>(0);
   const lastWeightUpdate = useRef<number>(0);
   const lastAlertTime = useRef<number>(0);
-  const sensorSafety = useRef<SensorSafety>({ 1: true, 3: true, 5: true });
+  const sensorSafety = useRef<SensorSafety>({});
   const alertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cancelCooldownUntil = useRef<number>(0);
 
@@ -62,6 +62,12 @@ export default function HomeScreen() {
 
   const triggerAlert = useCallback(() => {
     const now = Date.now();
+    console.log("🚨 triggerAlert called:", {
+      now,
+      cancelCooldownUntil: cancelCooldownUntil.current,
+      lastAlertTime: lastAlertTime.current,
+    });
+
     if (now < cancelCooldownUntil.current) return;
     if (now - lastAlertTime.current < 5000) return;
 
@@ -77,12 +83,14 @@ export default function HomeScreen() {
     alertTimer.current = timer;
   }, []);
 
-  const cancelAlert = () => {
-    setShowAlertPopup(false);
-    setIsSafe(true);
-    sensorSafety.current = { 1: true, 3: true, 5: true };
-    cancelCooldownUntil.current = Date.now() + 60000;
-  };
+const cancelAlert = () => {
+  setShowAlertPopup(false);
+  setIsSafe(true);
+  Object.keys(sensorSafety.current).forEach(key => {
+    sensorSafety.current[parseInt(key)] = true;
+  });
+  cancelCooldownUntil.current = Date.now() + 60000;
+};
 
   const updateSafety = useCallback((sensorType: number, value: number) => {
     const threshold = thresholds[sensorType];
@@ -90,12 +98,22 @@ export default function HomeScreen() {
 
     const safe = value >= threshold.min && value <= threshold.max;
     const previouslySafe = sensorSafety.current[sensorType];
+
     sensorSafety.current[sensorType] = safe;
 
     const allSafe = Object.values(sensorSafety.current).every(Boolean);
     setIsSafe(allSafe);
 
-    if (!safe && previouslySafe) {
+    console.log("🧪 Safety check:", {
+      sensorType,
+      value,
+      threshold,
+      safe,
+      previouslySafe,
+      allSafe,
+    });
+
+    if (!safe && previouslySafe !== false) {
       triggerAlert();
     }
 

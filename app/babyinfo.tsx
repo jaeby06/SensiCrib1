@@ -4,14 +4,7 @@ import { Image, StyleSheet, View } from "react-native";
 import { ActivityIndicator, Text } from "react-native-paper";
 import { subscribeToDeviceStatus, supabase } from "../utils/supabaseclient";
 
-type DeviceStatus =
-  | "active"
-  | "inactive"
-  | "error"
-  | "disconnected"
-  | "offline"
-  | "pending"
-  | "not-found";
+type DeviceStatus = "active" | "error" | "offline";
 
 const BabyInfo = () => {
   const { deviceId, babyId } = useLocalSearchParams();
@@ -67,7 +60,10 @@ const BabyInfo = () => {
     temperature: number | null,
     timestamp: Date | null
   ): DeviceStatus => {
-    if (!temperature || !timestamp) return "inactive";
+    if (temperature === null || timestamp === null) {
+      console.log("❌ No temperature data — marking device as error");
+      return "error";
+    }
 
     const now = new Date();
     const diffMs = now.getTime() - timestamp.getTime();
@@ -80,7 +76,7 @@ const BabyInfo = () => {
 
     return "active";
   };
-
+  
   useEffect(() => {
     const fetchUserData = async () => {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -177,7 +173,7 @@ const BabyInfo = () => {
   }, [deviceId]);
 
   useEffect(() => {
-    if (!timeoutReached || temperature === null) return;
+    if (!timeoutReached) return;
 
     const evaluatedStatus = evaluateDeviceStatus(temperature, lastTemperatureTimestamp);
     setDeviceStatus(evaluatedStatus);
@@ -186,9 +182,15 @@ const BabyInfo = () => {
   useEffect(() => {
     if (!timeoutReached || deviceStatus === "pending") return;
 
-    console.log("🚀 Navigating based on status:", deviceStatus);
+    console.log("🚀 Evaluated device status:", deviceStatus);
+
     if (deviceStatus === "active") {
       router.replace("/(tabs)");
+    } else if (deviceStatus === "error" || deviceStatus === "offline") {
+      console.log("⏳ Showing error/offline message for 5 seconds before redirecting...");
+      setTimeout(() => {
+        router.replace(`/connect?babyId=${babyId}`);
+      }, 5000);
     } else {
       router.replace(`/connect?babyId=${babyId}`);
     }
@@ -203,11 +205,7 @@ const BabyInfo = () => {
 
   const statusColors: Record<DeviceStatus, string> = {
     active: "#4CAF50",
-    inactive: "#FFC107",
-    disconnected: "#FF5722",
     error: "#F44336",
-    "not-found": "#B0BEC5",
-    pending: "#FFC107",
     offline: "#F44336",
   };
 
@@ -215,18 +213,10 @@ const BabyInfo = () => {
     switch (deviceStatus) {
       case "active":
         return `✅ Monitoring in progress${dots}`;
-      case "disconnected":
-        return `⚠️ Device disconnected${dots}`;
       case "error":
         return `❌ Error: Check device${dots}`;
-      case "not-found":
-        return `⚠️ Device not found${dots}`;
-      case "inactive":
-        return `⏸ Device inactive${dots}`;
       case "offline":
         return `🔴 Device offline${dots}`;
-      default:
-        return `⏳ Waiting for device${dots}`;
     }
   };
 
@@ -249,7 +239,6 @@ const BabyInfo = () => {
           </Text>
         </View>
       )}
-
       <View style={[styles.statusContainer, { backgroundColor: statusColors[deviceStatus] }]}>
         {deviceStatus === "pending" ? (
           <>
@@ -257,7 +246,19 @@ const BabyInfo = () => {
             <Text style={styles.statusText}>{renderStatusText()}</Text>
           </>
         ) : (
-          <Text style={styles.statusText}>{renderStatusText()}</Text>
+          <View>
+            <Text style={styles.statusText}>{renderStatusText()}</Text>
+            {deviceStatus === "error" && (
+              <Text style={styles.statusDetail}>
+                No temperature data was found. Please check the device connection.
+              </Text>
+            )}
+            {deviceStatus === "offline" && (
+              <Text style={styles.statusDetail}>
+                Device is offline. Last temperature reading is over 1 minute old.
+              </Text>
+            )}
+          </View>
         )}
       </View>
     </View>
@@ -318,6 +319,13 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginLeft: 8,
   },
+  statusDetail: {
+  color: "#fff",
+  fontSize: 14,
+  marginTop: 4,
+  fontStyle: "italic",
+},
+
 });
 
 export default BabyInfo;
