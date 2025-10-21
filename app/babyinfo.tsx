@@ -20,25 +20,22 @@ const BabyInfo = () => {
   const [baby, setBaby] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
 
-  useEffect(() => {
-    if (!babyId || !deviceId) {
-      console.error("Missing babyId or deviceId, redirecting...");
-      router.replace("/connect");
-    }
-  }, [babyId, deviceId, router]);
+  // Function to calculate the time difference in minutes and hours
+  const calculateTimeDifference = (timestamp: Date) => {
+    const now = new Date();
+    const diffMs = now.getTime() - timestamp.getTime();
+    const diffMinutes = diffMs / 1000 / 60; // Convert milliseconds to minutes
+    const diffHours = diffMinutes / 60; // Convert minutes to hours
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDots((prev) => (prev.length < 3 ? prev + "." : ""));
-    }, 500);
-    return () => clearInterval(interval);
-  }, [deviceStatus]);
+    return { diffMinutes, diffHours };
+  };
 
+  // Fetch the latest temperature data from Supabase
   const fetchTemperatureData = async () => {
     const { data, error } = await supabase
       .from("sensor_data")
       .select("value, timestamp")
-      .eq("sensor_type_id", 1)
+      .eq("sensor_type_id", 1) // For temperature
       .eq("device_id", deviceId)
       .order("timestamp", { ascending: false })
       .limit(1)
@@ -56,6 +53,7 @@ const BabyInfo = () => {
     setLastTemperatureTimestamp(new Date(data.timestamp));
   };
 
+  // Evaluate the device status based on the time difference of the last temperature reading
   const evaluateDeviceStatus = (
     temperature: number | null,
     timestamp: Date | null
@@ -65,18 +63,31 @@ const BabyInfo = () => {
       return "error";
     }
 
-    const now = new Date();
-    const diffMs = now.getTime() - timestamp.getTime();
-    const diffMinutes = diffMs / 1000 / 60;
+    const { diffMinutes, diffHours } = calculateTimeDifference(timestamp);
 
     if (diffMinutes > 1) {
-      console.log("📴 Temperature data is stale:", diffMinutes.toFixed(2), "min old");
+      console.log(`📴 Temperature data is stale: ${diffMinutes.toFixed(2)} min old`);
       return "offline";
     }
 
     return "active";
   };
-  
+
+  useEffect(() => {
+    if (!babyId || !deviceId) {
+      console.error("Missing babyId or deviceId, redirecting...");
+      router.replace("/connect");
+    }
+  }, [babyId, deviceId, router]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots((prev) => (prev.length < 3 ? prev + "." : ""));
+    }, 500);
+    return () => clearInterval(interval);
+  }, [deviceStatus]);
+
+  // Fetch user data and baby data
   useEffect(() => {
     const fetchUserData = async () => {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -94,7 +105,6 @@ const BabyInfo = () => {
 
       if (profileError) {
         console.error("❌ Error fetching user details:", profileError);
-        // Continue even if profile fetch fails
       }
 
       setUser(user);
@@ -123,12 +133,6 @@ const BabyInfo = () => {
 
       if (babyError) {
         console.error("❌ Error fetching baby details:", babyError);
-        console.error("Error details:", {
-          message: babyError.message,
-          code: babyError.code,
-          details: babyError.details,
-          hint: babyError.hint
-        });
         return;
       }
 
@@ -141,6 +145,7 @@ const BabyInfo = () => {
     fetchBabyData();
   }, [user, babyId]);
 
+  // Subscribe to device status changes and poll for temperature data
   useEffect(() => {
     if (!deviceId) return;
 
@@ -185,7 +190,9 @@ const BabyInfo = () => {
     console.log("🚀 Evaluated device status:", deviceStatus);
 
     if (deviceStatus === "active") {
-      router.replace("/(tabs)");
+      setTimeout(() => {
+        router.replace("/(tabs)");
+      }, 5000);
     } else if (deviceStatus === "error" || deviceStatus === "offline") {
       console.log("⏳ Showing error/offline message for 5 seconds before redirecting...");
       setTimeout(() => {
@@ -206,7 +213,7 @@ const BabyInfo = () => {
   const statusColors: Record<DeviceStatus, string> = {
     active: "#4CAF50",
     error: "#F44336",
-    offline: "#F44336",
+    offline: "#808080",
   };
 
   const renderStatusText = () => {
@@ -239,6 +246,7 @@ const BabyInfo = () => {
           </Text>
         </View>
       )}
+
       <View style={[styles.statusContainer, { backgroundColor: statusColors[deviceStatus] }]}>
         {deviceStatus === "pending" ? (
           <>
@@ -250,12 +258,19 @@ const BabyInfo = () => {
             <Text style={styles.statusText}>{renderStatusText()}</Text>
             {deviceStatus === "error" && (
               <Text style={styles.statusDetail}>
-                No temperature data was found. Please check the device connection.
+                No data was found. Please check the device connection.
               </Text>
             )}
-            {deviceStatus === "offline" && (
+            {deviceStatus === "offline" && lastTemperatureTimestamp && (
               <Text style={styles.statusDetail}>
-                Device is offline. Last temperature reading is over 1 minute old.
+                Device is offline. Last data reading was{" "}
+                {(() => {
+                  const { diffMinutes, diffHours } = calculateTimeDifference(lastTemperatureTimestamp);
+                  if (diffHours >= 1) {
+                    return `${Math.floor(diffHours)} hours ago`;
+                  }
+                  return `${Math.floor(diffMinutes)} minutes ago`;
+                })()}
               </Text>
             )}
           </View>
@@ -320,12 +335,11 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   statusDetail: {
-  color: "#fff",
-  fontSize: 14,
-  marginTop: 4,
-  fontStyle: "italic",
-},
-
+    color: "#fff",
+    fontSize: 14,
+    marginTop: 4,
+    fontStyle: "italic",
+  },
 });
 
 export default BabyInfo;

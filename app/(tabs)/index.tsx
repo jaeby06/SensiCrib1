@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../utils/supabaseclient';
 
-const SENSOR_KEYS = ['weight', 'temperature', 'soundLevel', 'movement'] as const;
+const SENSOR_KEYS = ['weight', 'temperature', 'soundLevel', 'movement', 'humidity'] as const;
 type SensorKey = typeof SENSOR_KEYS[number];
 
 interface SensorData {
@@ -13,6 +13,7 @@ interface SensorData {
   temperature: string;
   soundLevel: string;
   movement: string;
+  humidity: string; // Added humidity to the sensor data
 }
 
 interface Threshold {
@@ -34,6 +35,7 @@ export default function HomeScreen() {
     temperature: '',
     soundLevel: '',
     movement: '',
+    humidity: '', // Added humidity to the sensor data
   });
 
   const [babyId, setBabyId] = useState<string | null>(null);
@@ -66,11 +68,21 @@ export default function HomeScreen() {
       now,
       cancelCooldownUntil: cancelCooldownUntil.current,
       lastAlertTime: lastAlertTime.current,
+      timeSinceLastAlert: now - lastAlertTime.current,
+      inCooldown: now < cancelCooldownUntil.current,
+      tooSoon: now - lastAlertTime.current < 5000,
     });
 
-    if (now < cancelCooldownUntil.current) return;
-    if (now - lastAlertTime.current < 5000) return;
+    if (now < cancelCooldownUntil.current) {
+      console.log("⏸️ Alert BLOCKED - in cancel cooldown");
+      return;
+    }
+    if (now - lastAlertTime.current < 5000) {
+      console.log("⏸️ Alert BLOCKED - too soon since last alert");
+      return;
+    }
 
+    console.log("✅✅✅ ALERT ACTUALLY TRIGGERED! ✅✅✅");
     lastAlertTime.current = now;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     playAlertSound();
@@ -78,58 +90,93 @@ export default function HomeScreen() {
 
     if (alertTimer.current) clearTimeout(alertTimer.current);
     const timer = setTimeout(() => {
+      console.log("⏰ Auto-closing alert popup");
       setShowAlertPopup(false);
     }, 5000);
     alertTimer.current = timer;
   }, []);
 
-const cancelAlert = () => {
-  setShowAlertPopup(false);
-  setIsSafe(true);
-  Object.keys(sensorSafety.current).forEach(key => {
-    sensorSafety.current[parseInt(key)] = true;
-  });
-  cancelCooldownUntil.current = Date.now() + 60000;
-};
+  const cancelAlert = () => {
+    console.log("🛑 Alert cancelled by user - 60s cooldown started");
+    setShowAlertPopup(false);
+    setIsSafe(true);
+    Object.keys(sensorSafety.current).forEach(key => {
+      sensorSafety.current[parseInt(key)] = true;
+    });
+    cancelCooldownUntil.current = Date.now() + 60000;
+    console.log("Cooldown until:", new Date(cancelCooldownUntil.current).toLocaleTimeString());
+  };
 
   const updateSafety = useCallback((sensorType: number, value: number) => {
     const threshold = thresholds[sensorType];
-    if (!threshold) return;
+    
+    console.log("=" .repeat(60));
+    console.log("🔍 updateSafety called:");
+    console.log("  Sensor Type:", sensorType);
+    console.log("  Value:", value);
+    console.log("  Threshold:", threshold);
+    
+    if (!threshold) {
+      console.error("❌ NO THRESHOLD FOUND for sensor type:", sensorType);
+      console.log("  Available thresholds:", Object.keys(thresholds));
+      console.log("=" .repeat(60));
+      return;
+    }
 
     const safe = value >= threshold.min && value <= threshold.max;
     const previouslySafe = sensorSafety.current[sensorType];
 
+    console.log("  Is Safe?:", safe);
+    console.log("  Min:", threshold.min, "Max:", threshold.max);
+    console.log("  Value >= Min?:", value >= threshold.min);
+    console.log("  Value <= Max?:", value <= threshold.max);
+    console.log("  Previous Safety State:", previouslySafe);
+
     sensorSafety.current[sensorType] = safe;
 
-    const allSafe = Object.values(sensorSafety.current).every(Boolean);
+    // Only check sensors that have reported data
+    const reportedSensors = Object.keys(sensorSafety.current).map(Number);
+    const allSafe = reportedSensors.every(key => sensorSafety.current[key] === true);
+    
+    console.log("  All Sensors Safe?:", allSafe);
+    console.log("  Reported Sensors:", reportedSensors);
+    console.log("  Safety States:", JSON.stringify(sensorSafety.current));
+    
     setIsSafe(allSafe);
 
-    console.log("🧪 Safety check:", {
-      sensorType,
-      value,
-      threshold,
-      safe,
-      previouslySafe,
-      allSafe,
-    });
-
-    if (!safe && previouslySafe !== false) {
+    // Trigger alert if this sensor is now unsafe
+    const shouldTrigger = !safe && previouslySafe !== false;
+    console.log("  Should Trigger Alert?:", shouldTrigger);
+    console.log("  (!safe):", !safe);
+    console.log("  (previouslySafe !== false):", previouslySafe !== false);
+    
+    if (shouldTrigger) {
+      console.log("🚨🚨🚨 CALLING triggerAlert() 🚨🚨🚨");
       triggerAlert();
+    } else {
+      console.log("  ❌ Alert NOT triggered because:");
+      if (safe) console.log("    - Value IS within safe range");
+      if (!safe && previouslySafe === false) console.log("    - Sensor was already marked unsafe");
     }
 
     if (allSafe) {
+      console.log("  ✅ All safe - clearing any active alerts");
       setShowAlertPopup(false);
       if (alertTimer.current) clearTimeout(alertTimer.current);
     }
+    
+    console.log("=" .repeat(60));
   }, [thresholds, triggerAlert]);
 
   useEffect(() => {
     const fetchBabyAndThresholds = async () => {
       try {
+        console.log("🔄 Fetching baby and thresholds...");
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError || !session || !session.user) throw new Error("User not authenticated");
 
         const userId = session.user.id;
+        console.log("👤 User ID:", userId);
 
         const { data: babyData, error: babyError } = await supabase
           .from('baby')
@@ -141,6 +188,7 @@ const cancelAlert = () => {
 
         const babyId = babyData.baby_id;
         setBabyId(babyId);
+        console.log("👶 Baby ID:", babyId);
 
         const { data: thresholdData, error: thresholdError } = await supabase
           .from('thresholds')
@@ -149,14 +197,18 @@ const cancelAlert = () => {
 
         if (thresholdError) throw new Error(thresholdError.message);
 
+        console.log("📊 Raw threshold data from DB:", thresholdData);
+
         const mapped: Thresholds = {};
         thresholdData.forEach((t: { sensor_type_id: number; min_value: number; max_value: number }) => {
           mapped[t.sensor_type_id] = { min: t.min_value, max: t.max_value };
+          console.log(`  Sensor ${t.sensor_type_id}: ${t.min_value} - ${t.max_value}`);
         });
 
         setThresholds(mapped);
+        console.log("✅ Thresholds loaded successfully:", mapped);
       } catch (error) {
-        console.error("Error loading baby or thresholds:", error);
+        console.error("❌ Error loading baby or thresholds:", error);
       } finally {
         setLoading(false);
       }
@@ -167,6 +219,8 @@ const cancelAlert = () => {
 
   useEffect(() => {
     if (!babyId) return;
+
+    console.log("📡 Setting up threshold realtime listener for baby:", babyId);
 
     const thresholdChannel = supabase
       .channel('thresholds-realtime')
@@ -180,6 +234,7 @@ const cancelAlert = () => {
         },
         (payload) => {
           const t = payload.new;
+          console.log("📊 Threshold updated in realtime:", t);
           setThresholds(prev => ({
             ...prev,
             [t.sensor_type_id]: { min: t.min_value, max: t.max_value }
@@ -196,6 +251,8 @@ const cancelAlert = () => {
   useEffect(() => {
     if (!babyId) return;
 
+    console.log("📡 Setting up sensor data realtime listener for baby:", babyId);
+
     const channel = supabase
       .channel('sensor-data')
       .on(
@@ -207,18 +264,26 @@ const cancelAlert = () => {
           filter: `baby_id=eq.${babyId}`,
         },
         (payload) => {
-          console.log("📡 Incoming sensor payload:", payload);
+          console.log("\n📡📡📡 NEW SENSOR DATA 📡📡📡");
+          console.log("Full payload:", payload);
+          
           const entry = payload.new;
           if (!entry) {
             console.warn("⚠️ No payload.new received");
             return;
           }
 
+          console.log("Entry:", entry);
+          console.log("Sensor Type ID:", entry.sensor_type_id);
+          console.log("Value (raw):", entry.value);
+
           const value = parseFloat(entry.value);
           if (isNaN(value)) {
             console.warn("⚠️ Invalid sensor value:", entry.value);
             return;
           }
+
+          console.log("Value (parsed):", value);
 
           const sensorType = entry.sensor_type_id;
           const now = Date.now();
@@ -228,30 +293,52 @@ const cancelAlert = () => {
 
             switch (sensorType) {
               case 1:
+                console.log("📊 Updating temperature:", value);
                 updated.temperature = `${value}°C`;
+                break;
+              case 2: // Humidity sensor
+                console.log("📊 Updating humidity:", value);
+                updated.humidity = `${value}%`; // Update humidity
                 break;
               case 3:
                 if (now - lastSoundUpdate.current > 1000) {
+                  console.log("📊 Updating sound level:", value);
                   updated.soundLevel = `${value} dB`;
                   lastSoundUpdate.current = now;
+                } else {
+                  console.log("⏭️ Skipping sound update (throttled)");
                 }
                 break;
               case 4:
+                console.log("📊 Updating movement:", value);
                 updated.movement = value.toString();
                 break;
               case 5:
                 if (now - lastWeightUpdate.current > 2000) {
+                  console.log("📊 Updating weight:", value);
                   updated.weight = `${value} kg`;
                   lastWeightUpdate.current = now;
+                } else {
+                  console.log("⏭️ Skipping weight update (throttled)");
                 }
                 break;
+              default:
+                console.warn("⚠️ Unknown sensor type:", sensorType);
             }
 
             return updated;
           });
 
+          console.log("🔍 Checking if threshold exists for sensor type:", sensorType);
+          console.log("Available thresholds:", Object.keys(thresholds));
+          console.log("Threshold for this sensor:", thresholds[sensorType]);
+
           if (thresholds[sensorType]) {
+            console.log("✅ Threshold found, calling updateSafety");
             updateSafety(sensorType, value);
+          } else {
+            console.error("❌ NO THRESHOLD for sensor type:", sensorType);
+            console.log("This is likely why alerts aren't triggering!");
           }
         }
       )
@@ -279,7 +366,7 @@ const cancelAlert = () => {
       </View>
 
       <View style={styles.statusContainer}>
-        {['Weight', 'Temperature', 'Sound Level', 'Movement'].map((label, index) => {
+        {[ 'Temperature', 'Humidity', 'Sound Level', 'Movement','Weight'].map((label, index) => {
           const key = SENSOR_KEYS[index];
           return (
             <View style={styles.row} key={label}>
