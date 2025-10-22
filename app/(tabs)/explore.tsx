@@ -153,43 +153,44 @@ export default function ThresholdScreen() {
     };
   }, [babyId]);
 
-  const handleSave = async () => {
-    try {
-      if (!babyId) throw new Error("Baby ID not loaded");
+const handleSave = async () => {
+  try {
+    if (!babyId) throw new Error("Baby ID not loaded");
 
-      const thresholds = [
-        { sensor_type_id: 1, min_value: minTemp, max_value: maxTemp },
-        { sensor_type_id: 2, min_value: minHumidity, max_value: maxHumidity },
-        { sensor_type_id: 3, min_value: 0, max_value: soundSensitivity },
-        { sensor_type_id: 5, min_value: 0, max_value: weightRange },
-        { sensor_type_id: 6, min_value: minPitch, max_value: maxPitch },
-      ];
+    const thresholds = [
+      { sensor_type_id: 1, min_value: minTemp, max_value: maxTemp },
+      { sensor_type_id: 2, min_value: minHumidity, max_value: maxHumidity },
+      { sensor_type_id: 3, min_value: 0, max_value: soundSensitivity },
+      { sensor_type_id: 5, min_value: 0, max_value: weightRange }, // Max weight is now 50
+      { sensor_type_id: 6, min_value: minPitch, max_value: maxPitch },
+    ];
 
-      console.log("Saving thresholds:", thresholds);
-      
-      const { error: insertError } = await supabase
-        .from('thresholds')
-        .upsert(
-          thresholds.map(t => ({
-            baby_id: babyId,
-            sensor_type_id: t.sensor_type_id,
-            min_value: t.min_value,
-            max_value: t.max_value,
-          })),
-          { onConflict: ['baby_id', 'sensor_type_id'] }
-        );
-
-      if (insertError) throw new Error(insertError.message);
-
-      Alert.alert(
-        "✅ Thresholds Saved",
-        `Max Temp: ${maxTemp}°C\nMin Temp: ${minTemp}°C\nMax Humidity: ${maxHumidity}%\nMin Humidity: ${minHumidity}%\nSound Sensitivity: ${soundSensitivity} dB\nWeight Range: ${weightRange} kg\nPitch Range: ${minPitch}-${maxPitch} Hz`
+    console.log("Saving thresholds:", thresholds);
+    
+    const { error: insertError } = await supabase
+      .from('thresholds')
+      .upsert(
+        thresholds.map(t => ({
+          baby_id: babyId,
+          sensor_type_id: t.sensor_type_id,
+          min_value: t.min_value,
+          max_value: t.max_value,
+        })),
+        { onConflict: 'baby_id,sensor_type_id' } // Use both baby_id and sensor_type_id for conflict resolution
       );
-    } catch (error) {
-      console.error("Error saving thresholds:", error);
-      Alert.alert("❌ Save Failed", "Could not save thresholds. Please try again.");
-    }
-  };
+
+    if (insertError) throw new Error(insertError.message);
+
+    Alert.alert(
+      "✅ Thresholds Saved",
+      `Max Temp: ${maxTemp}°C\nMin Temp: ${minTemp}°C\nMax Humidity: ${maxHumidity}%\nMin Humidity: ${minHumidity}%\nSound Sensitivity: ${soundSensitivity} dB\nWeight Range: ${weightRange} kg\nPitch Range: ${minPitch}-${maxPitch} Hz`
+    );
+  } catch (error) {
+    console.error("Error saving thresholds:", error);
+    Alert.alert("❌ Save Failed", "Could not save thresholds. Please try again.");
+  }
+};
+
 
   const getColor = (value: number, min: number, max: number) => {
     const mid = (min + max) / 2;
@@ -309,27 +310,6 @@ export default function ThresholdScreen() {
             maximumTrackTintColor="#ccc"
           />
 
-          {/* Weight Range */}
-          <View style={styles.row}>
-            <Text style={styles.label}>Weight Range</Text>
-            <Text style={styles.value}>{weightRange.toFixed(1)} kg</Text>
-          </View>
-          <ProgressBar
-            progress={weightRange / 10}
-            color={getColor(weightRange, 0, 10)}
-            style={styles.progress}
-          />
-          <Slider
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={10}
-            step={0.1}
-            value={weightRange}
-            onValueChange={setWeightRange}
-            minimumTrackTintColor={getColor(weightRange, 0, 10)}
-            maximumTrackTintColor="#ccc"
-          />
-
           {/* Max Pitch */}
           <View style={styles.row}>
             <Text style={styles.label}>Max Pitch</Text>
@@ -369,6 +349,27 @@ export default function ThresholdScreen() {
             value={minPitch}
             onValueChange={setMinPitch}
             minimumTrackTintColor={getColor(minPitch, 0, 1000)}
+            maximumTrackTintColor="#ccc"
+          />
+
+          {/* Weight */}
+          <View style={styles.row}>
+            <Text style={styles.label}>Weight Range</Text>
+            <Text style={styles.value}>{weightRange.toFixed(1)} kg</Text>
+          </View>
+          <ProgressBar
+            progress={weightRange / 50} // Adjusted for max 50kg
+            color={getColor(weightRange, 0, 50)}
+            style={styles.progress}
+          />
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={50} // Updated to 50kg
+            step={0.1}
+            value={weightRange}
+            onValueChange={setWeightRange}
+            minimumTrackTintColor={getColor(weightRange, 0, 50)}
             maximumTrackTintColor="#ccc"
           />
         </ScrollView>

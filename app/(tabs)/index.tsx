@@ -5,15 +5,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../utils/supabaseclient';
 
-const SENSOR_KEYS = ['weight', 'temperature', 'soundLevel', 'movement', 'humidity'] as const;
+// Updated the order of sensor keys
+const SENSOR_KEYS = ['temperature', 'humidity', 'soundLevel', 'soundPitch', 'weight', 'motion'] as const;
 type SensorKey = typeof SENSOR_KEYS[number];
 
 interface SensorData {
-  weight: string;
   temperature: string;
+  humidity: string;
   soundLevel: string;
-  movement: string;
-  humidity: string; // Added humidity to the sensor data
+  soundPitch: string;
+  weight: string;
+  motion: string; // Updated from 'movement' to 'motion'
 }
 
 interface Threshold {
@@ -31,11 +33,12 @@ interface SensorSafety {
 
 export default function HomeScreen() {
   const [sensorData, setSensorData] = useState<SensorData>({
-    weight: '',
     temperature: '',
+    humidity: '',
     soundLevel: '',
-    movement: '',
-    humidity: '', // Added humidity to the sensor data
+    soundPitch: '',
+    weight: '',
+    motion: '', // Updated from 'movement' to 'motion'
   });
 
   const [babyId, setBabyId] = useState<string | null>(null);
@@ -310,8 +313,8 @@ export default function HomeScreen() {
                 }
                 break;
               case 4:
-                console.log("📊 Updating movement:", value);
-                updated.movement = value.toString();
+                console.log("📊 Updating motion:", value); // Updated from movement to motion
+                updated.motion = value.toString();
                 break;
               case 5:
                 if (now - lastWeightUpdate.current > 2000) {
@@ -366,7 +369,7 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.statusContainer}>
-        {[ 'Temperature', 'Humidity', 'Sound Level', 'Movement','Weight'].map((label, index) => {
+        {['Temperature', 'Humidity', 'Sound Level', 'Motion', 'Weight'].map((label, index) => {
           const key = SENSOR_KEYS[index];
           return (
             <View style={styles.row} key={label}>
