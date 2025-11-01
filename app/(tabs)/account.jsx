@@ -4,11 +4,12 @@ import {
   Alert,
   Image,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { supabase } from '../../utils/supabaseclient';
 
@@ -213,51 +214,54 @@ export default function ProfileScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>🗓️ Baby’s Safety Summary</Text>
 
-            {babyHistory.length === 0 ? (
-              <Text>No history available.</Text>
-            ) : (
-              <>
-                <Text style={{ fontWeight: '700', fontSize: 16, marginBottom: 10 }}>
-                  {babyHistory[currentDayIndex].day}
-                </Text>
-                {babyHistory[currentDayIndex].entries.map((entry, index) => {
-                  const icons = {
-                    1: '🌡️ Temperature',
-                    2: '🏃 Movement',
-                    3: '⚖️ Weight',
-                    5: '🎵 Sound',
-                  };
-                  const label = icons[entry.sensor_type_id] || '🧠 Unknown';
-                  const status =
-                    entry.sensor_type_id === 1 && entry.max_value > 38
-                      ? '⚠️ High'
-                      : '✅ Normal';
+            <ScrollView style={{ width: '85%', height: 500 }}>
+              {babyHistory.length === 0 ? (
+                <Text>No history available.</Text>
+              ) : (
+                <>
+                  <Text style={{ fontWeight: '700', fontSize: 16, marginBottom: 10 }}>
+                    {babyHistory[currentDayIndex].day}
+                  </Text>
+                  {babyHistory[currentDayIndex].entries.map((entry, index) => {
+                    const icons = {
+                      1: '🌡️ Temperature',
+                      2: '🏃 Movement',
+                      3: '⚖️ Weight',
+                      5: '🎵 Sound',
+                    };
+                    const label = icons[entry.sensor_type_id] || '🧠 Unknown';
+                    const status =
+                      entry.sensor_type_id === 1 && entry.max_value > 38
+                        ? '⚠️ High'
+                        : '✅ Normal';
 
-                  return (
-                    <View key={index} style={{ marginBottom: 10 }}>
-                      <Text>{label}</Text>
-                      <Text>
-                        Avg: {entry.avg_value}, Min: {entry.min_value}, Max: {entry.max_value} {status}
-                      </Text>
-                    </View>
-                  );
-                })}
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
-                  <TouchableOpacity
-                    disabled={currentDayIndex === 0}
-                    onPress={() => setCurrentDayIndex((i) => i - 1)}
-                  >
-                    <Text style={{ fontSize: 18 }}>⬅️</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    disabled={currentDayIndex === babyHistory.length - 1}
-                    onPress={() => setCurrentDayIndex((i) => i + 1)}
-                  >
-                    <Text style={{ fontSize: 18 }}>➡️</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
+                    return (
+                      <View key={index} style={{ marginBottom: 10 }}>
+                        <Text>{label}</Text>
+                        <Text>
+                          Avg: {entry.avg_value}, Min: {entry.min_value}, Max: {entry.max_value} {status}
+                        </Text>
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
+              <TouchableOpacity
+                disabled={currentDayIndex === 0}
+                onPress={() => setCurrentDayIndex((i) => i - 1)}
+              >
+                <Text style={{ fontSize: 18 }}>⬅️</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={currentDayIndex === babyHistory.length - 1}
+                onPress={() => setCurrentDayIndex((i) => i + 1)}
+              >
+                <Text style={{ fontSize: 18 }}>➡️</Text>
+              </TouchableOpacity>
+            </View>
 
             <TouchableOpacity style={styles.doneButton} onPress={() => setHistoryVisible(false)}>
               <Text style={styles.doneButtonText}>Close</Text>
