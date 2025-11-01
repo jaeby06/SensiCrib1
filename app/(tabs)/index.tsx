@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import GradientBackground from '../../components/ui/WhiteBlueGradient';
 import { useAlert } from '../../components/useAlert';
 import { supabase } from '../../utils/supabaseclient';
 
@@ -154,14 +155,17 @@ export default function HomeScreen() {
 
   if (loading) {
     return (
+      <GradientBackground>
       <View style={styles.container}>
         <ActivityIndicator size="large" color="#32CD32" />
         <Text>Logging in...</Text>
       </View>
+      </GradientBackground>
     );
   }
 
   return (
+    <GradientBackground>
     <View style={styles.container}>
       <View style={[styles.banner, { backgroundColor: alertColor }]}>
         <Text style={styles.bannerText}>{alertStatus}</Text>
@@ -215,13 +219,13 @@ export default function HomeScreen() {
         </View>
       </Modal>
     </View>
+    </GradientBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -237,7 +241,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   statusContainer: {
-    width: '80%',
+    width: '85%',
     gap: 20,
   },
   row: {

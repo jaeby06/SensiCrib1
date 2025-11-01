@@ -2,7 +2,9 @@ import Slider from '@react-native-community/slider';
 import React, { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { ProgressBar } from 'react-native-paper';
+import GradientBackground from '../../components/ui/WhiteBlueGradient';
 import { supabase } from '../../utils/supabaseclient';
+
 
 // Default thresholds for babies 0-2 years old in the Philippines
 const DEFAULT_THRESHOLDS = [
@@ -198,6 +200,7 @@ const handleSave = async () => {
   };
 
   return (
+    <GradientBackground>  
     <View style={styles.container}>
       <TouchableOpacity style={styles.adjustButton}>
         <Text style={styles.adjustButtonText}>Adjust Sensor Threshold</Text>
@@ -379,13 +382,13 @@ const handleSave = async () => {
         <Text style={styles.saveButtonText}>Save</Text>
       </TouchableOpacity>
     </View>
+    </GradientBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -402,8 +405,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   cardWrapper: {
-    width: '85%',
-    height: 500, // ADJUST THIS HEIGHT HERE
+    width: '100%',
+    height: 475,
     marginBottom: 20,
   },
   card: {
@@ -442,6 +445,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 60,
     borderRadius: 10,
     alignItems: 'center',
+    bottom: 10,
   },
   saveButtonText: {
     color: '#fff',

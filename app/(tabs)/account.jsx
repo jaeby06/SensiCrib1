@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -12,6 +13,7 @@ import {
   View
 } from 'react-native';
 import { supabase } from '../../utils/supabaseclient';
+
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -141,7 +143,12 @@ export default function ProfileScreen() {
           style={styles.avatar}
         />
       </View>
-    <View style={styles.container2}>
+      <LinearGradient
+        colors={['#f5f7fa', '#c3cfe2']} // 🎨 adjust to your preferred gradient
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
+        style={styles.container2}
+      >
       <View style={styles.card}>
         <View style={styles.row}>
           <Text style={styles.label}>Full Name:</Text>
@@ -269,7 +276,7 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
-      </View>
+      </LinearGradient>
     </View>
   );
 }
@@ -339,7 +346,7 @@ const styles = StyleSheet.create({
   },
   historyButton: {
     position: 'absolute',
-    bottom: 40,
+    bottom: 80,
     left: 20,
     backgroundColor: '#0B3C5D',
     paddingVertical: 14,
@@ -359,7 +366,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     position: 'absolute',
-    bottom: 40,
+    bottom: 80,
     right: 20,
   },
   logoutButtonText: {
