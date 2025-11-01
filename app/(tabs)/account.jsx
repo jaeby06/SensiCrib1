@@ -69,7 +69,7 @@ export default function ProfileScreen() {
 
     const { data: historyData, error: historyError } = await supabase
       .from('historical_data')
-      .select('sensor_type_id, avg_value, min_value, max_value, created_at')
+      .select('sensor_type_id, avg_value, created_at')  // Removed min_value and max_value
       .eq('baby_id', babyData.baby_id)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -96,26 +96,26 @@ export default function ProfileScreen() {
   };
 
   const handleUpdate = async () => {
-  if (!user) return;
+    if (!user) return;
 
-  const { error } = await supabase
-    .from('users')
-    .update({
-      full_name: fullName,
-      email: email,
-      phone_number: phone,
-    })
-    .eq('user_id', user.id);
+    const { error } = await supabase
+      .from('users')
+      .update({
+        full_name: fullName,
+        email: email,
+        phone_number: phone,
+      })
+      .eq('user_id', user.id);
 
-  if (error) {
-    console.error("Error updating profile:", error);
-    Alert.alert("Error", "Could not update profile.");
-    return;
-  }
+    if (error) {
+      console.error("Error updating profile:", error);
+      Alert.alert("Error", "Could not update profile.");
+      return;
+    }
 
-  setModalVisible(false);
-  Alert.alert("Success", "Profile Updated!");
-};
+    setModalVisible(false);
+    Alert.alert("Success", "Profile Updated!");
+  };
 
   const handleLogout = async () => {
     if (!user) {
@@ -231,7 +231,7 @@ export default function ProfileScreen() {
                     };
                     const label = icons[entry.sensor_type_id] || '🧠 Unknown';
                     const status =
-                      entry.sensor_type_id === 1 && entry.max_value > 38
+                      entry.sensor_type_id === 1 && entry.avg_value > 38
                         ? '⚠️ High'
                         : '✅ Normal';
 
@@ -239,7 +239,7 @@ export default function ProfileScreen() {
                       <View key={index} style={{ marginBottom: 10 }}>
                         <Text>{label}</Text>
                         <Text>
-                          Avg: {entry.avg_value}, Min: {entry.min_value}, Max: {entry.max_value} {status}
+                          Avg: {entry.avg_value} {status}
                         </Text>
                       </View>
                     );
@@ -299,7 +299,6 @@ const styles = StyleSheet.create({
     width: 90,
     height: 90,
     borderRadius: 45,
-    borderWidth: 3,
     borderColor: '#fff',
   },
   card: {
@@ -308,7 +307,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: '87%',
     marginBottom: 30,
-    marginTop: 20
+    marginTop: 20,
   },
   row: {
     flexDirection: 'row',
