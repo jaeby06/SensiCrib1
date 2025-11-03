@@ -144,7 +144,7 @@ export default function ProfileScreen() {
         />
       </View>
       <LinearGradient
-        colors={['#f5f7fa', '#c3cfe2']} // 🎨 adjust to your preferred gradient
+        colors={['#E8F1F5', '#C1DFF0', '#0B4F6C']} // 🎨 adjust to your preferred gradient
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container2}

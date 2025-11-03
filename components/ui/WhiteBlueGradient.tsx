@@ -8,7 +8,7 @@ const GradientBackground = ({ children }) => {
     <View style={styles.container}>
       {/* Base gradient */}
       <LinearGradient
-        colors={['#E8F0EF', '#DDE9F1', '#C7DCE8']}
+        colors={['#0B4F6C', '#145374', '#5588A3']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
