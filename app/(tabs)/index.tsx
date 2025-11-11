@@ -4,13 +4,13 @@ import GradientBackground from '../../components/ui/WhiteBlueGradient';
 import { useAlert } from '../../components/useAlert';
 import { supabase } from '../../utils/supabaseclient';
 
-const SENSOR_KEYS = ['temperature', 'humidity', 'soundLevel', 'soundPitch', 'weight', 'motion'] as const;
+const SENSOR_KEYS = ['temperature', 'humidity', 'soundStatus', 'soundPitch', 'weight', 'motion'] as const;
 
 export default function HomeScreen() {
   const [sensorData, setSensorData] = useState({
     temperature: '',
     humidity: '',
-    soundLevel: '',
+    soundStatus: 'Normal',
     soundPitch: '',
     weight: '',
     motion: 'Stable',
@@ -21,6 +21,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
 
   const sensorUpdateTimers = useRef<Record<number, NodeJS.Timeout>>({});
+  const soundStatusTimer = useRef<NodeJS.Timeout | null>(null);
 
   const {
     alertStatus,
@@ -29,6 +30,7 @@ export default function HomeScreen() {
     setShowAlertPopup,
     updateAlertStatus,
     handleMotion,
+    handleSound,
   } = useAlert(thresholds);
 
   const getColorForSensor = (sensorType: number) => {
@@ -37,25 +39,27 @@ export default function HomeScreen() {
     if (raw == null || !threshold) return '#32CD32';
 
     switch (sensorType) {
-      case 1: return raw > threshold.max ? '#FF3B30' : '#32CD32';
-      case 2: return raw < threshold.min || raw > threshold.max ? '#FF3B30' : '#32CD32';
-      case 3: return raw > threshold.max ? '#FF3B30' : '#32CD32';
-      case 5: return raw <= threshold.min ? '#FF3B30' : '#32CD32';
-      default: return '#32CD32';
+      case 1:
+        return raw > threshold.max ? '#FF3B30' : '#32CD32';
+      case 2:
+        return raw < threshold.min || raw > threshold.max ? '#FF3B30' : '#32CD32';
+      case 5:
+        return raw <= threshold.min ? '#FF3B30' : '#32CD32';
+      default:
+        return '#32CD32';
     }
   };
 
   const cancelAlert = () => {
     setShowAlertPopup(false);
-    // Reset alert status manually
-    setSensorData(prev => ({ ...prev, motion: 'Stable' }));
+    setSensorData(prev => ({ ...prev, motion: 'Stable', soundStatus: 'Normal' }));
   };
 
   useEffect(() => {
     const fetchBabyAndThresholds = async () => {
       try {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError || !session || !session.user) throw new Error("User not authenticated");
+        if (sessionError || !session || !session.user) throw new Error('User not authenticated');
 
         const userId = session.user.id;
         const { data: babyData, error: babyError } = await supabase
@@ -64,7 +68,7 @@ export default function HomeScreen() {
           .eq('user_id', userId)
           .maybeSingle();
 
-        if (babyError || !babyData) throw new Error("Baby not found");
+        if (babyError || !babyData) throw new Error('Baby not found');
 
         const babyId = babyData.baby_id;
         setBabyId(babyId);
@@ -77,13 +81,13 @@ export default function HomeScreen() {
         if (thresholdError) throw new Error(thresholdError.message);
 
         const mapped: Record<number, any> = {};
-        thresholdData.forEach((t) => {
+        thresholdData.forEach(t => {
           mapped[t.sensor_type_id] = { min: t.min_value, max: t.max_value };
         });
 
         setThresholds(mapped);
       } catch (error) {
-        console.error("❌ Error loading baby or thresholds:", error);
+        console.error('❌ Error loading baby or thresholds:', error);
       } finally {
         setLoading(false);
       }
@@ -97,128 +101,163 @@ export default function HomeScreen() {
 
     const channel = supabase
       .channel('sensor-data')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'sensor_data',
-        filter: `baby_id=eq.${babyId}`,
-      }, (payload) => {
-        const entry = payload.new;
-        if (!entry) return;
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'sensor_data',
+          filter: `baby_id=eq.${babyId}`,
+        },
+        payload => {
+          const entry = payload.new;
+          if (!entry) return;
 
-        const sensorType = entry.sensor_type_id;
-        const raw = parseFloat(entry.value);
-        if (isNaN(raw)) return;
+          const sensorType = entry.sensor_type_id;
+          const raw = parseFloat(entry.value);
+          if (isNaN(raw)) return;
 
-        console.log(`[${new Date().toISOString()}] Sensor ${sensorType} received: ${raw}`);
+          console.log(`[${new Date().toISOString()}] Sensor ${sensorType} received: ${raw}`);
 
-        if (sensorUpdateTimers.current[sensorType]) {
-          clearTimeout(sensorUpdateTimers.current[sensorType]);
-        }
-
-        sensorUpdateTimers.current[sensorType] = setTimeout(() => {
-          setRawValues(prev => {
-            if (prev[sensorType] !== raw) {
-              return { ...prev, [sensorType]: raw };
-            }
-            return prev;
-          });
-
-          setSensorData(prev => {
-            const updated = { ...prev };
-            switch (sensorType) {
-              case 1: updated.temperature = `${raw}°C`; break;
-              case 2: updated.humidity = `${raw}%`; break;
-              case 3: updated.soundLevel = `${raw} dB`; break;
-              case 4:
-                updated.motion = raw > 1.1 ? 'Triggered' : 'Stable';
-                handleMotion(raw);
-                break;
-              case 5: updated.weight = `${raw} kg`; break;
-              default: console.warn("⚠️ Unknown sensor type:", sensorType);
-            }
-            return updated;
-          });
-
-          if (thresholds[sensorType]) {
-            updateAlertStatus(sensorType, raw);
+          if (sensorUpdateTimers.current[sensorType]) {
+            clearTimeout(sensorUpdateTimers.current[sensorType]);
           }
-        }, 200);
-      })
+
+          sensorUpdateTimers.current[sensorType] = setTimeout(() => {
+            setRawValues(prev => {
+              if (prev[sensorType] !== raw) {
+                return { ...prev, [sensorType]: raw };
+              }
+              return prev;
+            });
+
+            setSensorData(prev => {
+              const updated = { ...prev };
+              switch (sensorType) {
+                case 1:
+                  updated.temperature = `${raw}°C`;
+                  break;
+                case 2:
+                  updated.humidity = `${raw}%`;
+                  break;
+                case 3:
+                  updated.soundStatus = 'Crying';
+                  handleSound();
+
+                  if (soundStatusTimer.current) {
+                    clearTimeout(soundStatusTimer.current);
+                  }
+                  soundStatusTimer.current = setTimeout(() => {
+                    setSensorData(prevData => ({ ...prevData, soundStatus: 'Normal' }));
+                    soundStatusTimer.current = null;
+                  }, 5000);
+                  break;
+                case 4:
+                  updated.motion = raw > 1.1 ? 'Triggered' : 'Stable';
+                  handleMotion(raw);
+                  break;
+                case 5:
+                  updated.weight = `${raw} kg`;
+                  break;
+                default:
+                  console.warn('⚠️ Unknown sensor type:', sensorType);
+              }
+              return updated;
+            });
+
+            if (thresholds[sensorType]) {
+              if (sensorType === 1 || sensorType === 2 || sensorType === 5) {
+                updateAlertStatus(sensorType, raw);
+              }
+            }
+          }, 200);
+        }
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
       Object.values(sensorUpdateTimers.current).forEach(clearTimeout);
+      if (soundStatusTimer.current) clearTimeout(soundStatusTimer.current);
     };
-  }, [babyId, thresholds, updateAlertStatus, handleMotion]);
+  }, [babyId, thresholds, updateAlertStatus, handleMotion, handleSound]);
 
   if (loading) {
     return (
       <GradientBackground>
-      <View style={styles.container}>
-        <ActivityIndicator size="large" color="#32CD32" />
-        <Text>Logging in...</Text>
-      </View>
+        <View style={styles.container}>
+          <ActivityIndicator size="large" color="#32CD32" />
+          <Text>Logging in...</Text>
+        </View>
       </GradientBackground>
     );
   }
 
   return (
     <GradientBackground>
-    <View style={styles.container}>
-      <View style={[styles.banner, { backgroundColor: alertColor }]}>
-        <Text style={styles.bannerText}>{alertStatus}</Text>
+      <View style={styles.container}>
+        <View style={[styles.banner, { backgroundColor: alertColor }]}>
+          <Text style={styles.bannerText}>{alertStatus}</Text>
+        </View>
+
+        <View style={styles.statusContainer}>
+          <View style={styles.row}>
+            <View style={styles.labelBox}><Text style={styles.labelText}>Temperature</Text></View>
+            <View style={[styles.valueBox, { backgroundColor: getColorForSensor(1) }]}>
+              <Text style={styles.valueText}>{sensorData.temperature || '—'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.labelBox}><Text style={styles.labelText}>Humidity</Text></View>
+            <View style={[styles.valueBox, { backgroundColor: getColorForSensor(2) }]}>
+              <Text style={styles.valueText}>{sensorData.humidity || '—'}</Text>
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.labelBox}><Text style={styles.labelText}>Sound</Text></View>
+            <View
+              style={[
+                styles.valueBox,
+                sensorData.soundStatus === 'Crying' ? styles.alertValue : styles.safeValue,
+              ]}
+            >
+              <Text style={styles.valueText}>{sensorData.soundStatus}</Text>
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.labelBox}><Text style={styles.labelText}>Motion</Text></View>
+            <View
+              style={[
+                styles.valueBox,
+                sensorData.motion === 'Triggered' ? styles.alertValue : styles.safeValue,
+              ]}
+            >
+              <Text style={styles.valueText}>{sensorData.motion}</Text>
+            </View>
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.labelBox}><Text style={styles.labelText}>Weight</Text></View>
+            <View style={[styles.valueBox, { backgroundColor: getColorForSensor(5) }]}>
+              <Text style={styles.valueText}>{sensorData.weight || '—'}</Text>
+            </View>
+          </View>
+        </View>
+
+        <Modal visible={showAlertPopup} transparent animationType="fade">
+          <View style={styles.popupOverlay}>
+            <View style={styles.popupBox}>
+              <Text style={styles.popupText}>🚨 Alert active for 5 seconds</Text>
+              <TouchableOpacity style={styles.popupButton} onPress={cancelAlert}>
+                <Text style={styles.popupButtonText}>Cancel Alert</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </View>
-
-      <View style={styles.statusContainer}>
-        <View style={styles.row}>
-          <View style={styles.labelBox}><Text style={styles.labelText}>Temperature</Text></View>
-          <View style={[styles.valueBox, { backgroundColor: getColorForSensor(1) }]}>
-            <Text style={styles.valueText}>{sensorData.temperature || '—'}</Text>
-          </View>
-        </View>
-
-        <View style={styles.row}>
-          <View style={styles.labelBox}><Text style={styles.labelText}>Humidity</Text></View>
-          <View style={[styles.valueBox, { backgroundColor: getColorForSensor(2) }]}>
-            <Text style={styles.valueText}>{sensorData.humidity || '—'}</Text>
-          </View>
-        </View>
-
-        <View style={styles.row}>
-          <View style={styles.labelBox}><Text style={styles.labelText}>Sound Level</Text></View>
-          <View style={[styles.valueBox, { backgroundColor: getColorForSensor(3) }]}>
-            <Text style={styles.valueText}>{sensorData.soundLevel || '—'}</Text>
-          </View>
-        </View>
-
-        <View style={styles.row}>
-          <View style={styles.labelBox}><Text style={styles.labelText}>Motion</Text></View>
-          <View style={[styles.valueBox, sensorData.motion === 'Triggered' ? styles.alertValue : styles.safeValue]}>
-            <Text style={styles.valueText}>{sensorData.motion}</Text>
-          </View>
-        </View>
-
-        <View style={styles.row}>
-          <View style={styles.labelBox}><Text style={styles.labelText}>Weight</Text></View>
-          <View style={[styles.valueBox, { backgroundColor: getColorForSensor(5) }]}>
-            <Text style={styles.valueText}>{sensorData.weight || '—'}</Text>
-          </View>
-        </View>
-      </View>
-
-      <Modal visible={showAlertPopup} transparent animationType="fade">
-        <View style={styles.popupOverlay}>
-          <View style={styles.popupBox}>
-            <Text style={styles.popupText}>🚨 Alert active for 5 seconds</Text>
-            <TouchableOpacity style={styles.popupButton} onPress={cancelAlert}>
-              <Text style={styles.popupButtonText}>Cancel Alert</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </View>
     </GradientBackground>
   );
 }

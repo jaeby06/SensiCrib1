@@ -32,16 +32,16 @@ export const useAlert = (thresholds: any) => {
   const [alertColor, setAlertColor] = useState<string>(ALERT_COLORS[ALERT_STATUS.SAFE]);
   const [showAlertPopup, setShowAlertPopup] = useState(false);
   const [sensorSafety, setSensorSafety] = useState<Record<number, boolean>>({
-    1: true,
-    2: true,
-    3: true,
-    4: true,
-    5: true,
+    1: true, // Temperature
+    2: true, // Humidity
+    3: true, // Sound
+    4: true, // Motion
+    5: true, // Weight
   });
 
-  const motionTimer = useRef<number | null>(null);
+  const motionTimer = useRef<NodeJS.Timeout | null>(null);
   const motionStartTime = useRef<number | null>(null);
-  const motionSafeRef = useRef(true);
+  const soundTimer = useRef<NodeJS.Timeout | null>(null);
   const prevSensorSafety = useRef(sensorSafety);
   const lastAlertTimestampRef = useRef<number>(0);
   const COOLDOWN_MS = 10000;
@@ -49,7 +49,7 @@ export const useAlert = (thresholds: any) => {
   const triggerAlert = useCallback((status: string) => {
     const now = Date.now();
     if (now - lastAlertTimestampRef.current < COOLDOWN_MS) {
-      console.log("Alert suppressed due to cooldown.");
+      console.log('Alert suppressed due to cooldown.');
       return;
     }
 
@@ -69,11 +69,24 @@ export const useAlert = (thresholds: any) => {
       return;
     }
 
-    const safe = value >= threshold.min && value <= threshold.max;
+    let safe = true;
+    if (sensorType === 1) {
+      safe = value <= threshold.max; // Temperature
+    } else if (sensorType === 2) {
+      safe = value >= threshold.min && value <= threshold.max; // Humidity
+    } else if (sensorType === 5) {
+      safe = value >= threshold.min; // Weight
+    } else {
+      safe = value >= threshold.min && value <= threshold.max;
+    }
 
     setSensorSafety((prev) => {
       if (prev[sensorType] === safe) return prev;
-      console.log(`[${new Date().toISOString()}] Sensor ${sensorType} safety changed to ${safe ? 'SAFE' : 'UNSAFE'}`);
+      console.log(
+        `[${new Date().toISOString()}] Sensor ${sensorType} safety changed to ${
+          safe ? 'SAFE' : 'UNSAFE'
+        }`
+      );
       return { ...prev, [sensorType]: safe };
     });
   };
@@ -81,6 +94,7 @@ export const useAlert = (thresholds: any) => {
   useEffect(() => {
     return () => {
       if (motionTimer.current) clearTimeout(motionTimer.current);
+      if (soundTimer.current) clearTimeout(soundTimer.current);
     };
   }, []);
 
@@ -89,20 +103,16 @@ export const useAlert = (thresholds: any) => {
       const timestamp = new Date().toISOString();
       console.log(`[${timestamp}] Sensor safety updated:`, sensorSafety);
 
-      const unsafeSensors = Object.keys(sensorSafety).filter(
-        (key) => !sensorSafety[parseInt(key)]
-      ).length;
-
-      console.log(`[${timestamp}] Unsafe sensor count: ${unsafeSensors}`);
+      const unsafeCount = Object.values(sensorSafety).filter((safe) => !safe).length;
+      console.log(`[${timestamp}] Unsafe sensor count: ${unsafeCount}`);
 
       let newStatus = ALERT_STATUS.SAFE;
-      if (unsafeSensors >= 3) newStatus = ALERT_STATUS.CRITICAL;
-      else if (unsafeSensors === 2) newStatus = ALERT_STATUS.MODERATE;
-      else if (unsafeSensors === 1) newStatus = ALERT_STATUS.MINOR;
+      if (unsafeCount >= 3) newStatus = ALERT_STATUS.CRITICAL;
+      else if (unsafeCount === 2) newStatus = ALERT_STATUS.MODERATE;
+      else if (unsafeCount === 1) newStatus = ALERT_STATUS.MINOR;
 
       setAlertStatus(newStatus);
       setAlertColor(ALERT_COLORS[newStatus]);
-
       console.log(`[${timestamp}] Alert status changed to ${newStatus}`);
       triggerAlert(newStatus);
 
@@ -116,9 +126,9 @@ export const useAlert = (thresholds: any) => {
       if (!motionStartTime.current) {
         motionStartTime.current = Date.now();
         motionTimer.current = setTimeout(() => {
-          if (Date.now() - motionStartTime.current >= 5000) {
+          if (Date.now() - (motionStartTime.current ?? 0) >= 5000) {
             setSensorSafety((prev) => {
-              if (prev[4] === false) return prev;
+              if (!prev[4]) return prev;
               console.log(`[${new Date().toISOString()}] Motion changed: STABLE → TRIGGERED`);
               return { ...prev, 4: false };
             });
@@ -129,12 +139,31 @@ export const useAlert = (thresholds: any) => {
       motionStartTime.current = null;
       if (motionTimer.current) clearTimeout(motionTimer.current);
       setSensorSafety((prev) => {
-        if (prev[4] === true) return prev;
+        if (prev[4]) return prev;
         console.log(`[${new Date().toISOString()}] Motion changed: TRIGGERED → STABLE`);
         return { ...prev, 4: true };
       });
     }
   };
+
+  const handleSound = useCallback(() => {
+    setSensorSafety((prev) => {
+      if (!prev[3]) return prev;
+      console.log(`[${new Date().toISOString()}] Sound safety changed: SAFE → UNSAFE (Crying)`);
+      return { ...prev, 3: false };
+    });
+
+    if (soundTimer.current) clearTimeout(soundTimer.current);
+
+    soundTimer.current = setTimeout(() => {
+      setSensorSafety((prev) => {
+        if (prev[3]) return prev;
+        console.log(`[${new Date().toISOString()}] Sound safety changed: UNSAFE → SAFE (Auto-reset)`);
+        return { ...prev, 3: true };
+      });
+      soundTimer.current = null;
+    }, 5000);
+  }, []);
 
   const resetAlertStatus = () => {
     setAlertStatus(ALERT_STATUS.SAFE);
@@ -150,6 +179,8 @@ export const useAlert = (thresholds: any) => {
     setShowAlertPopup,
     updateAlertStatus,
     handleMotion,
+    handleSound,
     resetAlertStatus,
+    sensorSafety,
   };
 };
