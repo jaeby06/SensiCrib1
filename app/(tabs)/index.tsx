@@ -21,7 +21,6 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
 
   const sensorUpdateTimers = useRef<Record<number, NodeJS.Timeout>>({});
-  const soundStatusTimer = useRef<NodeJS.Timeout | null>(null);
 
   const {
     alertStatus,
@@ -31,11 +30,19 @@ export default function HomeScreen() {
     updateAlertStatus,
     handleMotion,
     handleSound,
+    handleWeight,
+    sensorSafety,
   } = useAlert(thresholds);
 
   const getColorForSensor = (sensorType: number) => {
     const raw = rawValues[sensorType];
     const threshold = thresholds[sensorType];
+    
+    // For weight, use sensorSafety instead of threshold
+    if (sensorType === 5) {
+      return sensorSafety[5] ? '#32CD32' : '#FF3B30';
+    }
+    
     if (raw == null || !threshold) return '#32CD32';
 
     switch (sensorType) {
@@ -43,8 +50,6 @@ export default function HomeScreen() {
         return raw > threshold.max ? '#FF3B30' : '#32CD32';
       case 2:
         return raw < threshold.min || raw > threshold.max ? '#FF3B30' : '#32CD32';
-      case 5:
-        return raw <= threshold.min ? '#FF3B30' : '#32CD32';
       default:
         return '#32CD32';
     }
@@ -143,21 +148,16 @@ export default function HomeScreen() {
                 case 3:
                   updated.soundStatus = 'Crying';
                   handleSound();
-
-                  if (soundStatusTimer.current) {
-                    clearTimeout(soundStatusTimer.current);
-                  }
-                  soundStatusTimer.current = setTimeout(() => {
-                    setSensorData(prevData => ({ ...prevData, soundStatus: 'Normal' }));
-                    soundStatusTimer.current = null;
-                  }, 5000);
                   break;
                 case 4:
-                  updated.motion = raw > 1.1 ? 'Triggered' : 'Stable';
+                  // Use motion threshold from database or default to 1.5
+                  const motionThreshold = thresholds[4]?.min_value ?? 1.5;
+                  updated.motion = raw > motionThreshold ? 'Triggered' : 'Stable';
                   handleMotion(raw);
                   break;
                 case 5:
                   updated.weight = `${raw} kg`;
+                  handleWeight(raw); // Call the new handleWeight function
                   break;
                 default:
                   console.warn('⚠️ Unknown sensor type:', sensorType);
@@ -165,8 +165,9 @@ export default function HomeScreen() {
               return updated;
             });
 
+            // Only check thresholds for temperature (1) and humidity (2)
             if (thresholds[sensorType]) {
-              if (sensorType === 1 || sensorType === 2 || sensorType === 5) {
+              if (sensorType === 1 || sensorType === 2) {
                 updateAlertStatus(sensorType, raw);
               }
             }
@@ -178,9 +179,8 @@ export default function HomeScreen() {
     return () => {
       supabase.removeChannel(channel);
       Object.values(sensorUpdateTimers.current).forEach(clearTimeout);
-      if (soundStatusTimer.current) clearTimeout(soundStatusTimer.current);
     };
-  }, [babyId, thresholds, updateAlertStatus, handleMotion, handleSound]);
+  }, [babyId, thresholds, updateAlertStatus, handleMotion, handleSound, handleWeight]);
 
   if (loading) {
     return (
@@ -220,10 +220,10 @@ export default function HomeScreen() {
             <View
               style={[
                 styles.valueBox,
-                sensorData.soundStatus === 'Crying' ? styles.alertValue : styles.safeValue,
+                !sensorSafety[3] ? styles.alertValue : styles.safeValue,
               ]}
             >
-              <Text style={styles.valueText}>{sensorData.soundStatus}</Text>
+              <Text style={styles.valueText}>{!sensorSafety[3] ? 'Crying' : 'Normal'}</Text>
             </View>
           </View>
 

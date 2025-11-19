@@ -46,6 +46,14 @@ export const useAlert = (thresholds: any) => {
   const lastAlertTimestampRef = useRef<number>(0);
   const COOLDOWN_MS = 10000;
 
+  // Weight detection refs
+  const previousWeight = useRef<number | null>(null);
+  const weightHistory = useRef<number[]>([]);
+  
+  // Get weight thresholds from database or use defaults
+  const WEIGHT_DROP_THRESHOLD = thresholds[5]?.min_value ?? 1.0; // kg - sudden drop detection
+  const MAX_CHANGE_RATE = thresholds[5]?.max_value ?? 0.5; // kg per reading - rapid change detection
+
   const triggerAlert = useCallback((status: string) => {
     const now = Date.now();
     if (now - lastAlertTimestampRef.current < COOLDOWN_MS) {
@@ -74,8 +82,6 @@ export const useAlert = (thresholds: any) => {
       safe = value <= threshold.max; // Temperature
     } else if (sensorType === 2) {
       safe = value >= threshold.min && value <= threshold.max; // Humidity
-    } else if (sensorType === 5) {
-      safe = value >= threshold.min; // Weight
     } else {
       safe = value >= threshold.min && value <= threshold.max;
     }
@@ -122,18 +128,22 @@ export const useAlert = (thresholds: any) => {
   }, [sensorSafety, triggerAlert]);
 
   const handleMotion = (value: number) => {
-    if (value > 1.1) {
+    // Get motion thresholds from database or use defaults
+    const MOTION_THRESHOLD = thresholds[4]?.min_value ?? 1.5; // Motion intensity threshold
+    const MOTION_DURATION_MS = (thresholds[4]?.max_value ?? 5) * 1000; // Duration in milliseconds
+    
+    if (value > MOTION_THRESHOLD) {
       if (!motionStartTime.current) {
         motionStartTime.current = Date.now();
         motionTimer.current = setTimeout(() => {
-          if (Date.now() - (motionStartTime.current ?? 0) >= 5000) {
+          if (Date.now() - (motionStartTime.current ?? 0) >= MOTION_DURATION_MS) {
             setSensorSafety((prev) => {
               if (!prev[4]) return prev;
-              console.log(`[${new Date().toISOString()}] Motion changed: STABLE → TRIGGERED`);
+              console.log(`[${new Date().toISOString()}] Motion changed: STABLE → TRIGGERED (threshold: ${MOTION_THRESHOLD}, duration: ${MOTION_DURATION_MS}ms)`);
               return { ...prev, 4: false };
             });
           }
-        }, 5000);
+        }, MOTION_DURATION_MS);
       }
     } else {
       motionStartTime.current = null;
@@ -165,6 +175,52 @@ export const useAlert = (thresholds: any) => {
     }, 5000);
   }, []);
 
+  const handleWeight = useCallback((value: number) => {
+    let isUnsafe = false;
+    let reason = '';
+
+    // Check 1: Sudden Weight Drop
+    if (previousWeight.current !== null) {
+      const weightDrop = previousWeight.current - value;
+      
+      if (weightDrop > WEIGHT_DROP_THRESHOLD) {
+        isUnsafe = true;
+        reason = 'Sudden weight drop detected';
+      }
+    }
+
+    // Check 2: Rapid Weight Changes
+    if (weightHistory.current.length > 0) {
+      const lastWeight = weightHistory.current[weightHistory.current.length - 1];
+      const change = Math.abs(value - lastWeight);
+      
+      if (change > MAX_CHANGE_RATE) {
+        isUnsafe = true;
+        reason = reason ? `${reason} & Erratic readings` : 'Erratic weight readings';
+      }
+    }
+
+    // Update weight history
+    weightHistory.current.push(value);
+    if (weightHistory.current.length > 5) weightHistory.current.shift();
+    previousWeight.current = value;
+
+    // Update sensor safety
+    if (isUnsafe) {
+      setSensorSafety((prev) => {
+        if (!prev[5]) return prev;
+        console.log(`[${new Date().toISOString()}] Weight safety changed: SAFE → UNSAFE (${reason})`);
+        return { ...prev, 5: false };
+      });
+    } else {
+      setSensorSafety((prev) => {
+        if (prev[5]) return prev;
+        console.log(`[${new Date().toISOString()}] Weight safety changed: UNSAFE → SAFE`);
+        return { ...prev, 5: true };
+      });
+    }
+  }, []);
+
   const resetAlertStatus = () => {
     setAlertStatus(ALERT_STATUS.SAFE);
     setAlertColor(ALERT_COLORS[ALERT_STATUS.SAFE]);
@@ -180,6 +236,7 @@ export const useAlert = (thresholds: any) => {
     updateAlertStatus,
     handleMotion,
     handleSound,
+    handleWeight,
     resetAlertStatus,
     sensorSafety,
   };
