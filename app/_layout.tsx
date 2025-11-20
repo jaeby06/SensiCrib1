@@ -1,9 +1,11 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Audio } from 'expo-av'; // ✅ Added for audio setup
+import { Audio } from 'expo-av';
 import { useFonts } from 'expo-font';
+import * as Notifications from 'expo-notifications'; //
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import 'react-native-reanimated';
 import Toast from 'react-native-toast-message';
 
@@ -13,6 +15,15 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
+// 1. Setup Notification Handler (How notifications look when app is in foreground)
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true, // Show the banner
+    shouldPlaySound: true, // Play system sound
+    shouldSetBadge: false,
+  }),
+});
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
@@ -21,17 +32,44 @@ export default function RootLayout() {
     SpicyRice: require('../assets/fonts/SpicyRice-Regular.ttf'),
   });
 
-  // ✅ Configure audio globally once fonts are loaded
+  // 2. Configure Android Channel & Request Permissions
+  useEffect(() => {
+    const setupNotifications = async () => {
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX, // Make it pop up
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+        });
+      }
+
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        console.warn('Failed to get push token for push notification!');
+      }
+    };
+
+    setupNotifications();
+  }, []);
+
+  // Configure audio
   useEffect(() => {
     const configureAudio = async () => {
       try {
         await Audio.setAudioModeAsync({
           allowsRecordingIOS: false,
           staysActiveInBackground: true,
-          interruptionModeIOS: 1, // ✅ Correct constant
+          interruptionModeIOS: 1,
           playsInSilentModeIOS: true,
           shouldDuckAndroid: true,
-          interruptionModeAndroid: 1, // ✅ Correct constant
+          interruptionModeAndroid: 1,
           playThroughEarpieceAndroid: false,
         });
         console.log('✅ Audio mode configured');
@@ -46,7 +84,7 @@ export default function RootLayout() {
   }, [fontsLoaded]);
 
   if (!fontsLoaded) {
-    return null; // Or return a <SplashScreen />
+    return null;
   }
 
   return (

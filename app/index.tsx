@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Colors from '../constants/Colors'; // Import this
 import { supabase } from '../utils/supabaseclient';
 
 const Landing = () => {
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     padding: 16,
-    backgroundColor: '#0b4f6c',
+    backgroundColor: Colors.sensiBlue, // Replaced '#0b4f6c'
   },
   scrollContainer: {
     alignItems: 'center',
@@ -118,7 +119,7 @@ const styles = StyleSheet.create({
   button: {
     width: 160,
     alignSelf: 'center',
-    backgroundColor: '#fffff0',
+    backgroundColor: Colors.sensiCream, // Replaced '#fffff0'
   },
   h1: {
     alignItems: 'center',
@@ -132,9 +133,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   logo: {
-    width: 385,
-    height: 289,
+    width: '80%',        // Use percentage instead of fixed 385
+    aspectRatio: 1.33,   // Maintain the width/height ratio (385/289 ≈ 1.33)
+    height: undefined,   // Let aspect ratio calculate the height
     marginBottom: -50,
+    resizeMode: 'contain', // Ensure it doesn't get cut off
   },
   logoText: {
     fontSize: 64,

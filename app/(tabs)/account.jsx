@@ -47,9 +47,9 @@ export default function ProfileScreen() {
         return;
       }
 
-      setFullName(userInfo.full_name || "User’s Full Name");
-      setEmail(userInfo.email || userData.user.email || "User’s Email");
-      setPhone(userInfo.phone_number || "User’s Phone Number");
+      setFullName(userInfo.full_name || "User's Full Name");
+      setEmail(userInfo.email || userData.user.email || "User's Email");
+      setPhone(userInfo.phone_number || "User's Phone Number");
     };
 
     fetchUserInfo();
@@ -71,7 +71,7 @@ export default function ProfileScreen() {
 
     const { data: historyData, error: historyError } = await supabase
       .from('historical_data')
-      .select('sensor_type_id, avg_value, created_at')  // Removed min_value and max_value
+      .select('sensor_type_id, avg_value, status, created_at')
       .eq('baby_id', babyData.baby_id)
       .order('created_at', { ascending: false })
       .limit(50);
@@ -144,7 +144,7 @@ export default function ProfileScreen() {
         />
       </View>
       <LinearGradient
-        colors={['#E8F1F5', '#C1DFF0', '#0B4F6C']} // 🎨 adjust to your preferred gradient
+        colors={['#E8F1F5', '#C1DFF0', '#0B4F6C']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.container2}
@@ -219,7 +219,7 @@ export default function ProfileScreen() {
       <Modal animationType="slide" transparent={true} visible={historyVisible}>
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>🗓️ Baby’s Safety Summary</Text>
+            <Text style={styles.modalTitle}>🗓️ Baby's Safety Summary</Text>
 
             <ScrollView style={{ width: '85%', height: 500 }}>
               {babyHistory.length === 0 ? (
@@ -230,23 +230,27 @@ export default function ProfileScreen() {
                     {babyHistory[currentDayIndex].day}
                   </Text>
                   {babyHistory[currentDayIndex].entries.map((entry, index) => {
-                    const icons = {
-                      1: '🌡️ Temperature',
-                      2: '🏃 Movement',
-                      3: '⚖️ Weight',
-                      5: '🎵 Sound',
+                    const sensorInfo = {
+                      1: { icon: '🌡️', name: 'Temperature', unit: '°C' },
+                      2: { icon: '💧', name: 'Humidity', unit: '%' },
+                      3: { icon: '🎵', name: 'Sound', unit: '' },
+                      4: { icon: '🏃', name: 'Motion', unit: '' },
+                      5: { icon: '⚖️', name: 'Weight', unit: 'g' },
                     };
-                    const label = icons[entry.sensor_type_id] || '🧠 Unknown';
-                    const status =
-                      entry.sensor_type_id === 1 && entry.avg_value > 38
-                        ? '⚠️ High'
-                        : '✅ Normal';
+                    
+                    const sensor = sensorInfo[entry.sensor_type_id];
+                    if (!sensor) return null; // Skip unknown sensors
+                    
+                    const displayStatus = 
+                      entry.status === 'normal' 
+                        ? '✅ Normal' 
+                        : '⚠️ Triggered';
 
                     return (
                       <View key={index} style={{ marginBottom: 10 }}>
-                        <Text>{label}</Text>
+                        <Text>{sensor.icon} {sensor.name}</Text>
                         <Text>
-                          Avg: {entry.avg_value} {status}
+                          {entry.avg_value}{sensor.unit} {displayStatus}
                         </Text>
                       </View>
                     );
@@ -255,19 +259,24 @@ export default function ProfileScreen() {
               )}
             </ScrollView>
 
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 }}>
-              <TouchableOpacity
-                disabled={currentDayIndex === 0}
-                onPress={() => setCurrentDayIndex((i) => i - 1)}
-              >
-                <Text style={{ fontSize: 18 }}>⬅️</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                disabled={currentDayIndex === babyHistory.length - 1}
-                onPress={() => setCurrentDayIndex((i) => i + 1)}
-              >
-                <Text style={{ fontSize: 18 }}>➡️</Text>
-              </TouchableOpacity>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 20 }}>
+              {currentDayIndex > 0 && (
+                <TouchableOpacity
+                  onPress={() => setCurrentDayIndex((i) => i - 1)}
+                >
+                  <Text style={{ fontSize: 20 }}>⬅️</Text>
+                </TouchableOpacity>
+              )}
+              <Text style={{ fontSize: 18, fontWeight: '600', color: '#666' }}>
+                {currentDayIndex + 1} / {babyHistory.length}
+              </Text>
+              {currentDayIndex < babyHistory.length - 1 && (
+                <TouchableOpacity
+                  onPress={() => setCurrentDayIndex((i) => i + 1)}
+                >
+                  <Text style={{ fontSize: 20 }}>➡️</Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <TouchableOpacity style={styles.doneButton} onPress={() => setHistoryVisible(false)}>
