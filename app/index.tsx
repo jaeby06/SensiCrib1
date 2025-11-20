@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   logo: {
-    width: '80%',        // Use percentage instead of fixed 385
+    width: '100%',        // Use percentage instead of fixed 385
     aspectRatio: 1.33,   // Maintain the width/height ratio (385/289 ≈ 1.33)
     height: undefined,   // Let aspect ratio calculate the height
     marginBottom: -50,
