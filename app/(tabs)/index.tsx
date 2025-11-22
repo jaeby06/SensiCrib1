@@ -4,8 +4,6 @@ import GradientBackground from '../../components/ui/WhiteBlueGradient';
 import { useAlert } from '../../components/useAlert';
 import { supabase } from '../../utils/supabaseclient';
 
-const SENSOR_KEYS = ['temperature', 'humidity', 'soundStatus', 'soundPitch', 'weight', 'motion'] as const;
-
 export default function HomeScreen() {
   const [sensorData, setSensorData] = useState({
     temperature: '',
@@ -32,6 +30,7 @@ export default function HomeScreen() {
     handleSound,
     handleWeight,
     sensorSafety,
+    stopAlertSound,
   } = useAlert(thresholds);
 
   const getColorForSensor = (sensorType: number) => {
@@ -56,10 +55,12 @@ export default function HomeScreen() {
   };
 
   const cancelAlert = () => {
+    stopAlertSound();
     setShowAlertPopup(false);
     setSensorData(prev => ({ ...prev, motion: 'Stable', soundStatus: 'Normal' }));
   };
 
+  // 1. Fetch Initial Data
   useEffect(() => {
     const fetchBabyAndThresholds = async () => {
       try {
@@ -101,6 +102,38 @@ export default function HomeScreen() {
     fetchBabyAndThresholds();
   }, []);
 
+  // 2. Listen for Threshold Updates (Kept this fix!)
+  useEffect(() => {
+    if (!babyId) return;
+
+    const thresholdChannel = supabase
+      .channel('threshold-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'thresholds',
+          filter: `baby_id=eq.${babyId}`,
+        },
+        (payload) => {
+          const newT = payload.new;
+          console.log(`🔄 Threshold Updated for Sensor ${newT.sensor_type_id}`);
+          
+          setThresholds((prev) => ({
+            ...prev,
+            [newT.sensor_type_id]: { min: newT.min_value, max: newT.max_value },
+          }));
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(thresholdChannel);
+    };
+  }, [babyId]);
+
+  // 3. Listen for Sensor Data
   useEffect(() => {
     if (!babyId) return;
 
@@ -122,7 +155,7 @@ export default function HomeScreen() {
           const raw = parseFloat(entry.value);
           if (isNaN(raw)) return;
 
-          console.log(`[${new Date().toISOString()}] Sensor ${sensorType} received: ${raw}`);
+          // console.log(`[${new Date().toISOString()}] Sensor ${sensorType} received: ${raw}`);
 
           if (sensorUpdateTimers.current[sensorType]) {
             clearTimeout(sensorUpdateTimers.current[sensorType]);
@@ -150,22 +183,21 @@ export default function HomeScreen() {
                   handleSound();
                   break;
                 case 4:
-                  // Use motion threshold from database or default to 1.5
                   const motionThreshold = thresholds[4]?.min_value ?? 1.5;
                   updated.motion = raw > motionThreshold ? 'Triggered' : 'Stable';
                   handleMotion(raw);
                   break;
                 case 5:
                   updated.weight = `${raw} kg`;
-                  handleWeight(raw); // Call the new handleWeight function
+                  handleWeight(raw);
                   break;
                 default:
-                  console.warn('⚠️ Unknown sensor type:', sensorType);
+                  // console.warn('⚠️ Unknown sensor type:', sensorType);
+                  break;
               }
               return updated;
             });
 
-            // Only check thresholds for temperature (1) and humidity (2)
             if (thresholds[sensorType]) {
               if (sensorType === 1 || sensorType === 2) {
                 updateAlertStatus(sensorType, raw);
@@ -287,6 +319,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 12,
+    alignItems: 'center',
   },
   labelBox: {
     backgroundColor: '#0B3C5D',

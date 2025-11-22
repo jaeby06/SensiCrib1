@@ -16,18 +16,6 @@ const ALERT_COLORS = {
   [ALERT_STATUS.CRITICAL]: '#FF3B30',
 };
 
-const playAlertSound = async () => {
-  try {
-    const { sound } = await Audio.Sound.createAsync(require('../assets/alert.mp3'));
-    await sound.playAsync();
-    sound.setOnPlaybackStatusUpdate((status) => {
-      if (status.didJustFinish) sound.unloadAsync();
-    });
-  } catch (error) {
-    console.warn('Sound playback failed:', error);
-  }
-};
-
 export const useAlert = (thresholds: any) => {
   const [alertStatus, setAlertStatus] = useState<string>(ALERT_STATUS.SAFE);
   const [alertColor, setAlertColor] = useState<string>(ALERT_COLORS[ALERT_STATUS.SAFE]);
@@ -41,6 +29,10 @@ export const useAlert = (thresholds: any) => {
   const soundTimer = useRef<NodeJS.Timeout | null>(null);
   const prevSensorSafety = useRef(sensorSafety);
   const lastAlertTimestampRef = useRef<number>(0);
+  
+  // [NEW] Ref to track the active sound object
+  const soundRef = useRef<Audio.Sound | null>(null);
+  
   const COOLDOWN_MS = 5000;
 
   const previousWeight = useRef<number | null>(null);
@@ -49,6 +41,41 @@ export const useAlert = (thresholds: any) => {
   const WEIGHT_DROP_THRESHOLD = thresholds[5]?.min_value ?? 1.0;
   const MAX_CHANGE_RATE = thresholds[5]?.max_value ?? 0.5;
 
+  // [NEW] Internal function to play sound and store the reference
+  const playAlertSound = async () => {
+    try {
+      // Stop any existing sound first
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+      }
+      const { sound } = await Audio.Sound.createAsync(require('../assets/alert.mp3'));
+      soundRef.current = sound;
+      await sound.playAsync();
+      
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          sound.unloadAsync();
+          soundRef.current = null;
+        }
+      });
+    } catch (error) {
+      console.warn('Sound playback failed:', error);
+    }
+  };
+
+  // [NEW] Exposed function to stop the sound manually
+  const stopAlertSound = async () => {
+    if (soundRef.current) {
+      try {
+        await soundRef.current.stopAsync();
+        await soundRef.current.unloadAsync();
+        soundRef.current = null;
+      } catch (error) {
+        console.warn('Error stopping sound:', error);
+      }
+    }
+  };
+
   const triggerAlert = useCallback(async (status: string) => {
     const now = Date.now();
     if (now - lastAlertTimestampRef.current < COOLDOWN_MS) {
@@ -56,11 +83,10 @@ export const useAlert = (thresholds: any) => {
       return;
     }
 
-    // Trigger for MODERATE (Single Priority) or CRITICAL (Multiple Priority)
     if (status === ALERT_STATUS.MODERATE || status === ALERT_STATUS.CRITICAL) {
       lastAlertTimestampRef.current = now;
 
-      playAlertSound();
+      playAlertSound(); // Uses the new internal function
       setShowAlertPopup(true);
       setTimeout(() => setShowAlertPopup(false), 5000);
 
@@ -97,32 +123,26 @@ export const useAlert = (thresholds: any) => {
     return () => {
       if (motionTimer.current) clearTimeout(motionTimer.current);
       if (soundTimer.current) clearTimeout(soundTimer.current);
+      // Cleanup sound on unmount
+      if (soundRef.current) soundRef.current.unloadAsync();
     };
   }, []);
 
-  // [UPDATED LOGIC] Priority Sensors: Sound(3), Motion(4), Weight(5)
   useEffect(() => {
     if (JSON.stringify(sensorSafety) !== JSON.stringify(prevSensorSafety.current)) {
-      const timestamp = new Date().toISOString();
-      
-      // 1. Identify Priority Sensors (Sound=3, Motion=4, Weight=5)
       const prioritySensors = [3, 4, 5];
       const priorityUnsafeCount = prioritySensors.filter(id => !sensorSafety[id]).length;
 
-      // 2. Identify Environmental Sensors (Temp=1, Humidity=2)
       const envSensors = [1, 2];
       const envUnsafeCount = envSensors.filter(id => !sensorSafety[id]).length;
 
       let newStatus = ALERT_STATUS.SAFE;
 
       if (priorityUnsafeCount >= 2) {
-         // If 2 or more priority sensors trigger (e.g. Weight + Sound), it's CRITICAL
          newStatus = ALERT_STATUS.CRITICAL;
       } else if (priorityUnsafeCount === 1) {
-         // If exactly 1 priority sensor triggers (e.g. just Weight), it's MODERATE
          newStatus = ALERT_STATUS.MODERATE;
       } else if (envUnsafeCount > 0) {
-         // If only temp/humidity trigger, it's MINOR
          newStatus = ALERT_STATUS.MINOR;
       }
 
@@ -190,7 +210,6 @@ export const useAlert = (thresholds: any) => {
     previousWeight.current = value;
 
     setSensorSafety((prev) => {
-      // If unsafe, set safe=false. If safe, set safe=true.
       const safe = !isUnsafe;
       if (prev[5] === safe) return prev;
       return { ...prev, 5: safe };
@@ -215,5 +234,6 @@ export const useAlert = (thresholds: any) => {
     handleWeight,
     resetAlertStatus,
     sensorSafety,
+    stopAlertSound, // [NEW] Exported function
   };
 };

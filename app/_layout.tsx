@@ -1,7 +1,7 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Audio } from 'expo-av';
 import { useFonts } from 'expo-font';
-import * as Notifications from 'expo-notifications'; //
+import * as Notifications from 'expo-notifications';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -15,11 +15,11 @@ export const unstable_settings = {
   anchor: '(tabs)',
 };
 
-// 1. Setup Notification Handler (How notifications look when app is in foreground)
+// 1. Setup Notification Handler
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true, // Show the banner
-    shouldPlaySound: true, // Play system sound
+    shouldShowAlert: true,
+    shouldPlaySound: true,
     shouldSetBadge: false,
   }),
 });
@@ -32,13 +32,13 @@ export default function RootLayout() {
     SpicyRice: require('../assets/fonts/SpicyRice-Regular.ttf'),
   });
 
-  // 2. Configure Android Channel & Request Permissions
+  // 2. Configure Android Channel
   useEffect(() => {
     const setupNotifications = async () => {
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
           name: 'default',
-          importance: Notifications.AndroidImportance.MAX, // Make it pop up
+          importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
         });
@@ -59,8 +59,8 @@ export default function RootLayout() {
     setupNotifications();
   }, []);
 
-  // Configure audio
-  useEffect(() => {
+  // 3. Configure Audio & Start Background Loop
+useEffect(() => {
     const configureAudio = async () => {
       try {
         await Audio.setAudioModeAsync({
@@ -69,10 +69,20 @@ export default function RootLayout() {
           interruptionModeIOS: 1,
           playsInSilentModeIOS: true,
           shouldDuckAndroid: true,
-          interruptionModeAndroid: 1,
+          // [CHANGE] Set this to 2 (Duck Others) instead of 1
+          interruptionModeAndroid: 2, 
           playThroughEarpieceAndroid: false,
         });
         console.log('✅ Audio mode configured');
+
+        // [TESTING] Set volume to 0.1 initially to CONFIRM it is working, then set back to 0
+        const { sound } = await Audio.Sound.createAsync(
+          require('../assets/alert.mp3'),
+          { isLooping: true, volume: 0 } 
+        );
+        await sound.playAsync();
+        console.log('🔊 Background keep-alive started');
+
       } catch (error) {
         console.warn('⚠️ Audio configuration failed:', error);
       }
