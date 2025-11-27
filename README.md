@@ -1,4 +1,4 @@
-# SensiCrib 🍼  
+# SensiCrib 🍼
 **Smart Care Starts Here.**
 
 SensiCrib is a smart baby monitoring application built with React Native and Expo. It pairs with a dedicated hardware crib device to provide real-time monitoring of a baby's environment and health metrics. By integrating sensors for temperature, humidity, motion, weight, and sound, SensiCrib ensures parents have peace of mind through instant alerts and live status updates.
@@ -21,7 +21,7 @@ SensiCrib is a smart baby monitoring application built with React Native and Exp
 * **Frontend**: React Native, Expo (SDK 54), Expo Router
 * **UI Framework**: React Native Paper
 * **Backend / Database**: Supabase (PostgreSQL, Auth, Realtime)
-* **Hardware Integration**: ESP32/IoT device communicating via Supabase Realtime (Inferred)
+* **Hardware Integration**: ESP32/IoT device communicating via Supabase Realtime
 
 ## 🚀 Getting Started
 
@@ -65,3 +65,6 @@ SensiCrib is a smart baby monitoring application built with React Native and Exp
 
 ## 🤝 Authors
 * **Capstone Team SensiCrib**
+
+---
+*For detailed backend schema and RPC methods, see the [API Documentation](docs/API_DOCUMENTATION.md).*
