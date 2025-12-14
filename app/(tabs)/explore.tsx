@@ -159,38 +159,94 @@ export default function ThresholdScreen() {
     };
   }, [babyId]);
 
+  const getSafetyWarnings = () => {
+    const warnings = [];
+
+    // Temperature warnings
+    if (maxTemp > 30) {
+      warnings.push("⚠️ Temperature range may cause overheating risk");
+    }
+    if (minTemp < 22) {
+      warnings.push("⚠️ Temperature range may be too cold for baby");
+    }
+
+    // Humidity warnings
+    if (maxHumidity > 70 || minHumidity < 30) {
+      warnings.push("⚠️ Extreme humidity can affect baby's comfort and breathing");
+    }
+
+    // Cry sensitivity warnings
+    if (crySensitivity > 0.85) {
+      warnings.push("⚠️ High sound threshold may miss distress cries");
+    }
+
+    // Motion warnings
+    if (motionThreshold > 2.5) {
+      warnings.push("⚠️ Motion sensitivity too low – risk of missing falls");
+    }
+
+    // Weight warnings
+    if (weightDropThreshold < 0.5 || weightChangeRate < 0.2) {
+      warnings.push("⚠️ Weight threshold unsafe – may cause false alerts");
+    }
+
+    return warnings;
+  };
+
+  const saveThresholds = async () => {
+    const thresholds = [
+      { sensor_type_id: 1, min_value: minTemp, max_value: maxTemp },
+      { sensor_type_id: 2, min_value: minHumidity, max_value: maxHumidity },
+      { sensor_type_id: 3, min_value: cryConfirmation, max_value: crySensitivity },
+      { sensor_type_id: 4, min_value: motionThreshold, max_value: motionDuration },
+      { sensor_type_id: 5, min_value: weightDropThreshold, max_value: weightChangeRate },
+    ];
+
+    console.log("Saving thresholds:", thresholds);
+    
+    const { error: insertError } = await supabase
+      .from('thresholds')
+      .upsert(
+        thresholds.map(t => ({
+          baby_id: babyId,
+          sensor_type_id: t.sensor_type_id,
+          min_value: t.min_value,
+          max_value: t.max_value,
+        })),
+        { onConflict: 'baby_id,sensor_type_id' }
+      );
+
+    if (insertError) throw new Error(insertError.message);
+
+    Alert.alert(
+      "✅ Thresholds Saved",
+      `Max Temp: ${maxTemp}°C\nMin Temp: ${minTemp}°C\nMax Humidity: ${maxHumidity}%\nMin Humidity: ${minHumidity}%\nCry Sensitivity: ${(crySensitivity * 100).toFixed(0)}%\nCry Confirmation: ${cryConfirmation} times\nMotion Threshold: ${motionThreshold.toFixed(1)}\nMotion Duration: ${motionDuration}s\nWeight Drop Alert: ${weightDropThreshold} kg\nWeight Change Alert: ${weightChangeRate} kg`
+    );
+  };
+
   const handleSave = async () => {
     try {
       if (!babyId) throw new Error("Baby ID not loaded");
 
-      const thresholds = [
-        { sensor_type_id: 1, min_value: minTemp, max_value: maxTemp },
-        { sensor_type_id: 2, min_value: minHumidity, max_value: maxHumidity },
-        { sensor_type_id: 3, min_value: cryConfirmation, max_value: crySensitivity },
-        { sensor_type_id: 4, min_value: motionThreshold, max_value: motionDuration },
-        { sensor_type_id: 5, min_value: weightDropThreshold, max_value: weightChangeRate },
-      ];
-
-      console.log("Saving thresholds:", thresholds);
-      
-      const { error: insertError } = await supabase
-        .from('thresholds')
-        .upsert(
-          thresholds.map(t => ({
-            baby_id: babyId,
-            sensor_type_id: t.sensor_type_id,
-            min_value: t.min_value,
-            max_value: t.max_value,
-          })),
-          { onConflict: 'baby_id,sensor_type_id' }
+      // Check for safety warnings
+      const warnings = getSafetyWarnings();
+      if (warnings.length > 0) {
+        Alert.alert(
+          "⚠️ Safety Warning",
+          warnings.join("\n\n") + "\n\nDo you want to continue?",
+          [
+            { text: "Cancel", style: "cancel" },
+            { 
+              text: "Save Anyway", 
+              style: "destructive",
+              onPress: () => saveThresholds()
+            }
+          ]
         );
+        return;
+      }
 
-      if (insertError) throw new Error(insertError.message);
-
-      Alert.alert(
-        "✅ Thresholds Saved",
-        `Max Temp: ${maxTemp}°C\nMin Temp: ${minTemp}°C\nMax Humidity: ${maxHumidity}%\nMin Humidity: ${minHumidity}%\nCry Sensitivity: ${(crySensitivity * 100).toFixed(0)}%\nCry Confirmation: ${cryConfirmation} times\nMotion Threshold: ${motionThreshold.toFixed(1)}\nMotion Duration: ${motionDuration}s\nWeight Drop Alert: ${weightDropThreshold} kg\nWeight Change Alert: ${weightChangeRate} kg`
-      );
+      await saveThresholds();
     } catch (error) {
       console.error("Error saving thresholds:", error);
       Alert.alert("❌ Save Failed", "Could not save thresholds. Please try again.");
